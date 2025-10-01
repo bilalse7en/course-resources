@@ -17,6 +17,7 @@ body{background:#f8fafc}
 .mod-1{background:#f9f9ff}
 .pdf-color{color:#e74c3c}
 .fa-link{color:#2c6fbb}
+tr.bg-gray-300 td{background: #ffe7e7 !important;color: #000000 !important;text-decoration-style: double;text-decoration-line: line-through;text-wrap-mode: nowrap;}
 </style>
 </head>
 <body>
@@ -24,23 +25,261 @@ body{background:#f8fafc}
   <h1 class="mb-3"><i class="fa fa-file-excel text-success"></i> Resource Code Generator</h1>
   <p class="text-muted mb-3">Upload Excel → generates JSON + HTML. Glossary stays on top. (Now shows full module with title.)</p>
   <input id="fileInput" type="file" accept=".xlsx,.xls" class="form-control mb-3"/>
-  <div id="preview" class="mb-4"></div>
-  <h5>Generated JSON <button class="btn btn-sm btn-outline-secondary copy-btn" onclick="copyOutput('jsonOutput')"><i class="fa fa-copy"></i> Copy</button></h5>
-  <div id="jsonOutput" class="output-box mb-3" style="white-space:pre;max-height:300px;overflow:auto">JSON will appear here</div>
   <h5>Generated HTML <button class="btn btn-sm btn-outline-secondary copy-btn" onclick="copyOutput('htmlOutput')"><i class="fa fa-copy"></i> Copy</button></h5>
-  <div id="htmlOutput" class="output-box mb-3" style="white-space:pre-line;max-height:300px;overflow:auto">HTML will appear here</div>
+  <div id="htmlOutput" class="output-box my-3 border border-3" style="white-space:pre-line;max-height:300px;overflow:auto">HTML will appear here</div>
+  <div id="preview" class="mb-4" style="white-space:pre-line;max-height:300px;overflow:auto"></div>
+  <h5 hidden>Generated JSON <button class="btn btn-sm btn-outline-secondary copy-btn" onclick="copyOutput('jsonOutput')"><i class="fa fa-copy"></i> Copy</button></h5>
+  <div hidden id="jsonOutput" class="output-box mb-3" style="white-space:pre;max-height:300px;overflow:auto">JSON will appear here</div>  
 </div>
 
 <script>
-const copyOutput=id=>navigator.clipboard.writeText(document.getElementById(id).innerText||'');
-const extractActualUrl=o=>!o?'':typeof o=="string"?o:o.Target||o.target||o.url||o.href||(o.Rel&&o.Rel.Target)||'';
-function normCell(c){if(!c)return{text:'',url:'',isHyperlink:!1};if(typeof c=="object"&&("v"in c||"w"in c||"l"in c||"t"in c)){let r=c.w!==undefined&&c.w!==null?c.w:c.v;if(typeof r=="object")r=c.w||JSON.stringify(r)||'';let t=String(r===undefined||r===null?'':r).trim(),l=c.l||c.hyperlink||null,u=extractActualUrl(l)||(t&&(t.startsWith("http")||t.includes("://"))?t:"");return{text:t,url:u,isHyperlink:!!l}}let s=String(c||'').trim();return{text:s,url:s&&(s.startsWith("http")||s.includes("://"))?s:'',isHyperlink:!1}}
-function splitMulti(c){if(!c)return[];if(typeof c=="object"&&c.l)return[normCell(c)];let r=typeof c=="object"?(c.w!==undefined?c.w:c.v):c;r=r===undefined||r===null?'':String(r);if(!r.trim())return[];return r.split(/[\n;]+/).map(s=>{const t=s.trim();return{text:t,url:t&&(t.startsWith("http")||t.includes("://"))?t:'',isHyperlink:!1}}).filter(x=>x.text)}
-const pdfHref=i=>i&&i.url&&i.url.toString().trim()?i.url:'#';
-function linkDisplay(i){if(!i)return'';if(i.isHyperlink)return i.text||'';try{const u=new URL(i.url||i.text),h=u.hostname.toLowerCase();if(h.includes("google.com"))return"Google";if(h.includes("youtube.com"))return"YouTube";if(h.includes("github.com"))return"GitHub";return u.hostname.replace("www.","").split(".")[0]||i.text}catch(e){return i.text||''}}
-document.getElementById("fileInput").addEventListener("change",e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{const data=new Uint8Array(ev.target.result),wb=XLSX.read(data,{type:"array"}),sheet=wb.Sheets[wb.SheetNames[0]];if(sheet["!merges"])sheet["!merges"].forEach(m=>{const s=XLSX.utils.encode_cell({r:m.s.r,c:m.s.c}),v=sheet[s]?sheet[s].v:'';for(let R=m.s.r;R<=m.e.r;++R)for(let C=m.s.c;C<=m.e.c;++C){const a=XLSX.utils.encode_cell({r:R,c:C});if(!sheet[a])sheet[a]={t:"s",v:v}}});processSheet(sheet)};r.readAsArrayBuffer(f)});
-function processSheet(sheet){const cells={};for(const a in sheet)if(!a.startsWith("!"))cells[a]=sheet[a];const maxRow=Math.max(...Object.keys(cells).map(a=>XLSX.utils.decode_cell(a).r)),rows=[];for(let r=0;r<=maxRow;r++){const row=[];for(let c=0;c<10;c++){const addr=XLSX.utils.encode_cell({r,c});row[c]=cells[addr]||null}rows.push(row)}const headerRow=rows.find(r=>r.some(c=>c&&typeof c.v=="string"&&c.v.toLowerCase().includes("title"))),hidx=headerRow?rows.indexOf(headerRow):0,headers=rows[hidx].map(c=>c?String(c.v||'').toLowerCase():''),moduleCol=headers.findIndex(h=>h.includes("module")),titleCol=headers.findIndex(h=>h.includes("title")),pdfCol=headers.findIndex(h=>h.includes("pdf")),linkCol=headers.findIndex(h=>h.includes("link"));let tcol=titleCol===-1?1:titleCol,pcol=pdfCol===-1?2:pdfCol,lcol=linkCol===-1?3:linkCol;const dataRows=rows.slice(hidx+1),resources=[],titleMap={},isModulePattern=t=>/^Module\s*\d+:/.test(t),extractModuleNumber=t=>{const m=t.match(/^(Module\s*\d+):/);return m?m[1]:null};let currentModule='',currentTitle='',glossary='',preview=`<table class="table table-bordered table-sm"><thead><tr><th>Module</th><th>Title</th><th>PDFs</th><th>Links</th></tr></thead><tbody>`;for(const r of dataRows){const module=moduleCol>=0&&r[moduleCol]?normCell(r[moduleCol]).text:'',pdfs=pcol>=0&&r[pcol]?splitMulti(r[pcol]):[],links=lcol>=0&&r[lcol]?splitMulti(r[lcol]):[];let title=tcol>=0&&r[tcol]?normCell(r[tcol]).text:'';if(!module&&!title&&!pdfs.length&&!links.length)continue;if(!module&&title&&isModulePattern(title)){const m=extractModuleNumber(title);if(m){currentModule=m+(title.match(/^(Module\s*\d+):\s*(.*)/)[2]?": "+title.match(/^(Module\s*\d+):\s*(.*)/)[2].trim():'');preview+=`<tr class="table-info"><td colspan="4"><b>${currentModule}</b></td></tr>`;continue}}if((module&&module.toLowerCase().includes("glossary"))||(title&&title.toLowerCase().includes("glossary"))){glossary=links[0]?.url||pdfs[0]?.url||'#';preview+=`<tr class="glossary-row"><td colspan="2"><b><i class="fa fa-book"></i> Glossary</b></td><td>${pdfs.map(p=>p.text?`<a href="${p.url||'#'}" target="_blank"><i class="fa fa-file-pdf pdf-color"></i> ${p.text}</a>`:'').join("<br>")}</td><td>${links.map(l=>`<a href="${l.url||'#'}" target="_blank"><i class="fa fa-link"></i> ${linkDisplay(l)}</a>`).join("<br>")}</td></tr>`;continue}if(title){if(isModulePattern(title)){const m=extractModuleNumber(title);if(m){currentModule=m;title=title.replace(/^Module\s*\d+:\s*/,'').trim()}}currentTitle=title;const key=(currentModule||'')+"||"+currentTitle;if(!titleMap[key]){const e={module:currentModule||null,title:currentTitle,pdfs:[],links:[]};resources.push(e);titleMap[key]=e}}else if(!currentTitle)continue;const key=(currentModule||'')+"||"+currentTitle,entry=titleMap[key];if(entry){entry.pdfs.push(...pdfs);entry.links.push(...links)}const rowClass=pdfs.length===0&&links.length===0?'bg-secondary':'',displayModule=currentModule?extractModuleNumber(currentModule)||currentModule:'';preview+=`<tr class="${rowClass}"><td>${displayModule}</td><td>${currentTitle||''}</td><td>${pdfs.map(p=>p.text?`<a href="${p.url||'#'}" target="_blank"><i class="fa fa-file-pdf pdf-color"></i> ${p.text}</a>`:'').join("<br>")}</td><td>${links.map(l=>`<a href="${l.url||'#'}" target="_blank"><i class="fa fa-link"></i> ${linkDisplay(l)}</a>`).join("<br>")}</td></tr>`}preview+="</tbody></table>";document.getElementById("preview").innerHTML=preview;resources.forEach(e=>{e.pdfs=e.pdfs.filter((p,i,a)=>p&&p.text&&i===a.findIndex(x=>x.text===p.text&&(x.url||'')===(p.url||'')));e.links=e.links.filter((l,i,a)=>l&&l.text&&i===a.findIndex(x=>x.text===l.text&&(x.url||'')===(l.url||'')))});const outResources=resources.filter(e=>(e.pdfs&&e.pdfs.length)||(e.links&&e.links.length)),finalOutput=[{glossary:glossary||'#'},...outResources];document.getElementById("jsonOutput").textContent=JSON.stringify(finalOutput,null,2);document.getElementById("htmlOutput").textContent=generateHTML(glossary||'#',outResources)}
-function generateHTML(glossary,resources){let html=`<div class="bg-yellow-400 my-4 p-3 rounded-md shadow-md w-full"><h2 class="text-2xl leading-none m-0 flex items-center space-x-2"><i class="fa fa-book"></i><a href="${glossary}" target="_blank" class="text-blue-600 hover:underline">Glossary</a></h2></div>\n`;const modules={},renderList=e=>{if(!(e.links.length||e.pdfs.length))return'';let s='  <ul class="ml-8 list-none space-y-1">\n';for(const l of e.links){if(!l.text)continue;const href=l.url&&l.url.trim()?l.url:'#';s+=`    <li><i class="fa fa-link text-blue-600 me-2"></i><a href="${href}" target="_blank" class="ml-1 text-blue-600 hover:underline">${linkDisplay(l)}</a></li>\n`}for(const p of e.pdfs){if(!p.text)continue;const href=pdfHref(p);s+=`    <li><i class="fa fa-file-pdf text-red-600 me-2"></i><a href="${href}" target="_blank" class="ml-1 text-red-600 hover:underline">${p.text}</a></li>\n`}return s+'  </ul><hr class="bg-yellow-400 border-0 border-black mx-3 my-2 opacity-75 pt-1 shadow">\n'};let hasModules=!1;for(const r of resources){if(r.module){hasModules=!0;(modules[r.module]||(modules[r.module]=[])).push(r)}}if(hasModules){for(const[m,items]of Object.entries(modules)){html+=`<div class="bg-gray-100 my-4 p-3 rounded-md shadow-md w-full"><h4 class="mb-2 text-2xl font-semibold flex items-center space-x-2"><i class="fa fa-book-open-reader text-green-600"></i><span>${m}</span></h4><hr class="bg-green-600 border border-green-600 mb-3 mt-0 opacity-75 pt-1">`;for(const e of items){html+=`  <h5 class="flex font-semibold items-center mx-3 space-x-2 text-xl"><i class="fa fa-check-circle text-yellow-400"></i><span>${e.title}</span></h5><hr class="bg-yellow-400 border-0 border-black mx-3 my-2 opacity-75 pt-1 shadow">${renderList(e)}`}html+=`</div>\n`}}else{for(const e of resources){html+=`<div class="bg-gray-100 my-4 p-3 rounded-md shadow-md w-full"><h5 class="flex font-semibold items-center mx-3 space-x-2 text-xl"><i class="fa fa-check-circle text-yellow-400"></i><span>${e.title}</span></h5><hr class="bg-yellow-400 border-0 border-black mx-3 my-2 opacity-75 pt-1 shadow">${renderList(e)}</div>\n`}}return html;}
+const copyOutput = id => navigator.clipboard.writeText(document.getElementById(id).innerText || '');
+const extractActualUrl = o => !o ? '' : typeof o == "string" ? o : o.Target || o.target || o.url || o.href || (o.Rel && o.Rel.Target) || '';
+
+function normCell(c) {
+	if (!c) return {
+		text: '',
+		url: '',
+		isHyperlink: !1
+	};
+	if (typeof c == "object" && ("v" in c || "w" in c || "l" in c || "t" in c)) {
+		let r = c.w !== undefined && c.w !== null ? c.w : c.v;
+		if (typeof r == "object") r = c.w || JSON.stringify(r) || '';
+		let t = String(r === undefined || r === null ? '' : r).trim(),
+			l = c.l || c.hyperlink || null,
+			u = extractActualUrl(l) || (t && (t.startsWith("http") || t.includes("://")) ? t : "");
+		return {
+			text: t,
+			url: u,
+			isHyperlink: !!l
+		}
+	}
+	let s = String(c || '').trim();
+	return {
+		text: s,
+		url: s && (s.startsWith("http") || s.includes("://")) ? s : '',
+		isHyperlink: !1
+	}
+}
+
+function splitMulti(c) {
+	if (!c) return [];
+	if (typeof c == "object" && c.l) return [normCell(c)];
+	let r = typeof c == "object" ? (c.w !== undefined ? c.w : c.v) : c;
+	r = r === undefined || r === null ? '' : String(r);
+	if (!r.trim()) return [];
+	return r.split(/[\n;]+/).map(s => {
+		const t = s.trim();
+		return {
+			text: t,
+			url: t && (t.startsWith("http") || t.includes("://")) ? t : '',
+			isHyperlink: !1
+		}
+	}).filter(x => x.text)
+}
+const pdfHref = i => i && i.url && i.url.toString().trim() ? i.url : '#';
+
+function linkDisplay(i) {
+	if (!i) return '';
+	if (i.isHyperlink) return i.text || '';
+	try {
+		const u = new URL(i.url || i.text),
+			h = u.hostname.toLowerCase();
+		if (h.includes("google.com")) return "Google";
+		if (h.includes("youtube.com")) return "YouTube";
+		if (h.includes("github.com")) return "GitHub";
+		return u.hostname.replace("www.", "").split(".")[0] || i.text
+	} catch (e) {
+		return i.text || ''
+	}
+}
+document.getElementById("fileInput").addEventListener("change", e => {
+	const f = e.target.files[0];
+	if (!f) return;
+	const r = new FileReader();
+	r.onload = ev => {
+		const data = new Uint8Array(ev.target.result),
+			wb = XLSX.read(data, {
+				type: "array"
+			}),
+			sheet = wb.Sheets[wb.SheetNames[0]];
+		let mergeMap = {};
+		if (sheet["!merges"]) sheet["!merges"].forEach(m => {
+			const top = XLSX.utils.encode_cell({
+				r: m.s.r,
+				c: m.s.c
+			});
+			for (let R = m.s.r; R <= m.e.r; ++R)
+				for (let C = m.s.c; C <= m.e.c; ++C) {
+					const a = XLSX.utils.encode_cell({
+						r: R,
+						c: C
+					});
+					mergeMap[a] = top;
+					if (!sheet[a]) sheet[a] = {
+						t: "s",
+						v: sheet[top] ? sheet[top].v : ''
+					}
+				}
+		});
+		processSheet(sheet, mergeMap)
+	};
+	r.readAsArrayBuffer(f)
+});
+
+function processSheet(sheet, mergeMap = {}) {
+	const cells = {};
+	for (const a in sheet)
+		if (!a.startsWith("!")) cells[a] = sheet[a];
+	const maxRow = Math.max(...Object.keys(cells).map(a => XLSX.utils.decode_cell(a).r)),
+		rows = [];
+	for (let r = 0; r <= maxRow; r++) {
+		const row = [];
+		for (let c = 0; c < 10; c++) {
+			const addr = XLSX.utils.encode_cell({
+				r,
+				c
+			});
+			row[c] = cells[addr] || null
+		}
+		rows.push(row)
+	}
+	const headerRow = rows.find(r => r.some(c => c && typeof c.v == "string" && c.v.toLowerCase().includes("title"))),
+		hidx = headerRow ? rows.indexOf(headerRow) : 0,
+		headers = rows[hidx].map(c => c ? String(c.v || '').toLowerCase() : ''),
+		moduleCol = headers.findIndex(h => h.includes("module")),
+		titleCol = headers.findIndex(h => h.includes("title")),
+		pdfCol = headers.findIndex(h => h.includes("pdf")),
+		linkCol = headers.findIndex(h => h.includes("link"));
+	let tcol = titleCol === -1 ? 1 : titleCol,
+		pcol = pdfCol === -1 ? 2 : pdfCol,
+		lcol = linkCol === -1 ? 3 : linkCol;
+	const dataRows = rows.slice(hidx + 1),
+		resources = [],
+		titleMap = {},
+		isModulePattern = t => /^Module\s*\d+:/.test(t),
+		extractModuleNumber = t => {
+			const m = t.match(/^(Module\s*\d+):/);
+			return m ? m[1] : null
+		};
+	let currentModule = '',
+		currentTitle = '',
+		glossary = '',
+		preview = `<table class="table table-bordered table-sm"><thead><tr><th>Module</th><th>Title</th><th>PDFs</th><th>Links</th></tr></thead><tbody>`;
+	for (let ri = 0; ri < dataRows.length; ri++) {
+		const r = dataRows[ri],
+			module = moduleCol >= 0 && r[moduleCol] ? normCell(r[moduleCol]).text : '',
+			addrPdf = pcol >= 0 ? XLSX.utils.encode_cell({
+				r: ri + hidx + 1,
+				c: pcol
+			}) : '',
+			addrLink = lcol >= 0 ? XLSX.utils.encode_cell({
+				r: ri + hidx + 1,
+				c: lcol
+			}) : '',
+			isTopPdf = !addrPdf || !mergeMap[addrPdf] || mergeMap[addrPdf] === addrPdf,
+			isTopLink = !addrLink || !mergeMap[addrLink] || mergeMap[addrLink] === addrLink,
+			pdfs = isTopPdf && pcol >= 0 && r[pcol] ? splitMulti(r[pcol]) : [],
+			links = isTopLink && lcol >= 0 && r[lcol] ? splitMulti(r[lcol]) : [];
+		let title = tcol >= 0 && r[tcol] ? normCell(r[tcol]).text : '';
+		if (!module && !title && !pdfs.length && !links.length) continue;
+		if (!module && title && isModulePattern(title)) {
+			const m = extractModuleNumber(title);
+			if (m) {
+				currentModule = m + (title.match(/^(Module\s*\d+):\s*(.*)/)[2] ? ": " + title.match(/^(Module\s*\d+):\s*(.*)/)[2].trim() : '');
+				preview += `<tr class="table-info"><td colspan="4"><b>${currentModule}</b></td></tr>`;
+				continue
+			}
+		}
+		if ((module && module.toLowerCase().includes("glossary")) || (title && title.toLowerCase().includes("glossary"))) {
+			glossary = links[0]?.url || pdfs[0]?.url || '#';
+			preview += `<tr class="glossary-row"><td colspan="2"><b><i class="fa fa-book"></i> Glossary</b></td><td>${pdfs.map(p=>p.text?`<a href="${p.url||'#'}" target="_blank"><i class="fa fa-file-pdf pdf-color"></i> ${p.text}</a>`:'').join("<br>")}</td><td>${links.map(l=>`<a href="${l.url||'#'}" target="_blank"><i class="fa fa-link"></i> ${linkDisplay(l)}</a>`).join("<br>")}</td></tr>`;
+			continue
+		}
+		if (title) {
+			if (isModulePattern(title)) {
+				const m = extractModuleNumber(title);
+				if (m) {
+					currentModule = m;
+					title = title.replace(/^Module\s*\d+:\s*/, '').trim()
+				}
+			}
+			currentTitle = title;
+			const key = (currentModule || '') + "||" + currentTitle;
+			if (!titleMap[key]) {
+				const e = {
+					module: currentModule || null,
+					title: currentTitle,
+					pdfs: [],
+					links: []
+				};
+				resources.push(e);
+				titleMap[key] = e
+			}
+		} else if (!currentTitle) continue;
+		const key = (currentModule || '') + "||" + currentTitle,
+			entry = titleMap[key];
+		if (entry) {
+			pdfs.forEach(p => {
+				if (p && p.text && !entry.pdfs.some(x => x.text === p.text && (x.url || '') === (p.url || ''))) entry.pdfs.push(p)
+			});
+			links.forEach(l => {
+				if (l && l.text && !entry.links.some(x => x.text === l.text && (x.url || '') === (l.url || ''))) entry.links.push(l)
+			})
+		}
+		const rowClass = (pdfs.length === 0 && links.length === 0) ? 'bg-gray-300' : '',
+			displayModule = currentModule ? extractModuleNumber(currentModule) || currentModule : '';
+		preview += `<tr class="${rowClass}"><td>${displayModule}</td><td>${currentTitle||''}</td><td>${pdfs.map(p=>p.text?`<a href="${p.url||'#'}" target="_blank"><i class="fa fa-file-pdf pdf-color"></i> ${p.text}</a>`:'').join("<br>")}</td><td>${links.map(l=>`<a href="${l.url||'#'}" target="_blank"><i class="fa fa-link"></i> ${linkDisplay(l)}</a>`).join("<br>")}</td></tr>`
+	}
+	preview += "</tbody></table>";
+	document.getElementById("preview").innerHTML = preview;
+	const outResources = resources.filter(e => (e.pdfs && e.pdfs.length) || (e.links && e.links.length));
+	document.getElementById("jsonOutput").textContent = JSON.stringify([{
+		glossary: glossary || '#'
+	}, ...outResources], null, 2);
+	document.getElementById("htmlOutput").textContent = generateHTML(glossary || '#', outResources)
+}
+
+function generateHTML(glossary, resources) {
+	let html = `<div class="bg-black ps-1 rounded-md shadow-md"><div class="bg-yellow-400 my-4 p-3 w-full"><h2 class="text-2xl leading-none m-0 flex items-center space-x-2"><i class="fa fa-book"></i><a href="${glossary}" target="_blank" class="text-blue-600 hover:underline">Glossary</a></h2></div></div>\n`;
+	const modules = {},
+		renderList = e => {
+			if (!(e.links.length || e.pdfs.length)) return '';
+			let s = '  <ul class="ml-8 list-none space-y-1">\n';
+			for (const l of e.links) {
+				if (!l.text) continue;
+				const href = l.url && l.url.trim() ? l.url : '#';
+				s += `    <li><i class="fa fa-link text-blue-600 me-2"></i><a href="${href}" target="_blank" class="text-blue-600 hover:underline">${linkDisplay(l)}</a></li>\n`
+			}
+			for (const p of e.pdfs) {
+				if (!p.text) continue;
+				const href = pdfHref(p);
+				s += `    <li><i class="fa fa-file-pdf text-red-600 me-2"></i><a href="${href}" target="_blank" class="ml-1 text-red-600 hover:underline">${p.text}</a></li>\n`
+			}
+			return s + '  </ul><hr class="bg-yellow-400 border-0 mx-3 my-2 opacity-75 pt-1 shadow">\n'
+		};
+	let hasModules = !1;
+	for (const r of resources) {
+		if (r.module) {
+			hasModules = !0;
+			(modules[r.module] || (modules[r.module] = [])).push(r)
+		}
+	}
+	if (hasModules) {
+		for (const [m, items] of Object.entries(modules)) {
+			html += `<div class="bg-yellow-400 ps-1 rounded-md shadow-md"><div class="bg-gray-100 my-4 p-3 w-full"><h4 class="mb-2 text-2xl font-semibold flex items-center space-x-2"><i class="fa fa-book-open-reader text-green-600"></i><span>${m}</span></h4><hr class="bg-green-600 border border-green-600 mb-3 mt-0 opacity-75 pt-1">`;
+			for (const e of items) {
+				html += `  <h5 class="flex font-semibold items-center mx-3 space-x-2 text-xl"><i class="fa fa-check-circle text-yellow-400"></i><span>${e.title}</span></h5><hr class="bg-yellow-400 border-0 mx-3 my-2 opacity-75 pt-1 shadow">${renderList(e)}`
+			}
+			html += `</div></div>\n`
+		}
+	} else {
+		for (const e of resources) {
+			html += `<div class="bg-yellow-400 ps-1 rounded-md shadow-md"><div class="bg-gray-100 my-4 p-3 w-full"><h5 class="flex font-semibold items-center mx-3 space-x-2 text-xl"><i class="fa fa-check-circle text-yellow-400"></i><span>${e.title}</span></h5><hr class="bg-yellow-400 border-0 mx-3 my-2 opacity-75 pt-1 shadow">${renderList(e)}</div></div>\n`
+		}
+	}
+	return html;
+}
 </script>
 <input type="hidden" id="inputData" />
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
